@@ -30,17 +30,51 @@ async function start() {
 
   app.get('/metrics', metricsHandler);
 
-  app.get('/api/notifications', (_req, res) => {
-    res.json({ notifications: getNotifications() });
+  app.get('/api/notifications/providers', (_req, res) => {
+    res.json({
+      providers: [
+        {
+          id: 'sendgrid',
+          name: 'SendGrid',
+          type: 'email',
+          mode: process.env.SENDGRID_MOCK !== 'false' ? 'mock' : 'live',
+        },
+        {
+          id: 'twilio',
+          name: 'Twilio',
+          type: 'sms',
+          mode: process.env.TWILIO_MOCK !== 'false' ? 'mock' : 'live',
+        },
+      ],
+    });
+  });
+
+  app.get('/api/notifications', (req, res) => {
+    const { userId, email, limit } = req.query;
+    res.json({
+      notifications: getNotifications({
+        userId: userId,
+        email: email,
+        limit: limit ? Number(limit) : 50,
+      }),
+    });
   });
 
   app.post('/api/notifications/email', async (req, res, next) => {
     try {
-      const { to, subject, body } = req.body;
+      const { to, subject, body, html, userId, orderId } = req.body;
       if (!to || !subject) {
         return res.status(400).json({ error: 'to and subject are required' });
       }
-      const notification = await sendEmail({ to, subject, body });
+      const notification = await sendEmail({
+        to,
+        subject,
+        body: body || '',
+        html,
+        userId,
+        eventType: 'manual',
+        orderId,
+      });
       res.status(201).json({ notification });
     } catch (err) {
       next(err);
@@ -49,11 +83,17 @@ async function start() {
 
   app.post('/api/notifications/sms', async (req, res, next) => {
     try {
-      const { to, message } = req.body;
+      const { to, message, userId, orderId } = req.body;
       if (!to || !message) {
         return res.status(400).json({ error: 'to and message are required' });
       }
-      const notification = await sendSms({ to, message });
+      const notification = await sendSms({
+        to,
+        message,
+        userId,
+        eventType: 'manual',
+        orderId,
+      });
       res.status(201).json({ notification });
     } catch (err) {
       next(err);

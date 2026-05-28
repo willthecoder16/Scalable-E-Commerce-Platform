@@ -197,14 +197,35 @@ make logging
 
 ## Web frontend
 
-React + TypeScript storefront in `frontend/` integrated with all four core services:
+React + TypeScript storefront in `frontend/` integrated with all microservices:
 
 | Page | Microservice |
 |------|----------------|
 | Register / Login / Profile | User Service |
 | Product catalog & detail | Product Catalog Service |
 | Shopping cart | Cart Service |
-| Checkout & order history | Order Service (+ Payment for checkout) |
+| Checkout (2-step) & order history | Order + **Payment** Services |
+| **Notifications** inbox | **Notification** Service |
+| Order detail — payment info, mark shipped | Payment + Notification Services |
+
+### Payment Service (Stripe & PayPal)
+
+- Checkout step 2: choose **Stripe** (card) or **PayPal** (email)
+- Mock mode by default (`STRIPE_MOCK=true`, `PAYPAL_MOCK=true`)
+- Live mode: set mocks to `false` and add API keys in `.env` (see `.env.example`)
+- Order detail shows transaction ID, card last4, or PayPal email
+
+### Notification Service (SendGrid & Twilio)
+
+Automatic messages via RabbitMQ events:
+
+| Event | Email (SendGrid) | SMS (Twilio) |
+|-------|------------------|--------------|
+| `order.created` | Order confirmation | If phone on profile |
+| `payment.completed` | Payment receipt | — |
+| `order.status.updated` | Status update | When status = `shipped` |
+
+View history at **Notifications** in the nav. Demo: open a paid order → **Mark as shipped** to trigger shipping notifications.
 
 ## Project structure
 

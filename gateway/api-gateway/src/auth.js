@@ -6,6 +6,8 @@ const PUBLIC_PATHS = [
   /^\/api\/products(\/?|\?.*)?$/,
   /^\/api\/products\/[0-9a-f-]{36}$/i,
   /^\/api\/products\/categories/,
+  /^\/api\/payments\/providers/,
+  /^\/api\/notifications\/providers/,
   /^\/$/,
   /^\/health/,
   /^\/ready/,

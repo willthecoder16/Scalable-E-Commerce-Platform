@@ -51,6 +51,7 @@ function createRoutes(publishEvent) {
         total,
         email: req.body.email,
         phone: req.body.phone,
+        items: cart.items,
       });
 
       res.status(201).json({ order });

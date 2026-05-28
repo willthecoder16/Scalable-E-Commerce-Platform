@@ -1,41 +1,84 @@
 const { sendEmail, sendSms } = require('./providers');
+const {
+  orderConfirmationEmail,
+  paymentReceiptEmail,
+  shippingUpdateEmail,
+} = require('./templates');
 const logger = require('/shared/logger');
 
 async function handleOrderCreated(event) {
   const email = event.email || `user-${event.userId}@example.com`;
+  const tpl = orderConfirmationEmail({
+    orderId: event.orderId,
+    total: event.total,
+    items: event.items,
+  });
+
   await sendEmail({
     to: email,
-    subject: 'Order Confirmation',
-    body: `Your order #${event.orderId} has been placed. Total: $${event.total.toFixed(2)}`,
+    subject: tpl.subject,
+    body: tpl.body,
+    html: tpl.html,
+    userId: event.userId,
+    eventType: 'order.created',
+    orderId: event.orderId,
   });
 
   if (event.phone) {
     await sendSms({
       to: event.phone,
-      message: `Order #${event.orderId.slice(0, 8)} confirmed. Total: $${event.total.toFixed(2)}`,
+      message: `ShopFlow: Order #${event.orderId.slice(0, 8)} confirmed. Total $${event.total.toFixed(2)}.`,
+      userId: event.userId,
+      eventType: 'order.created',
+      orderId: event.orderId,
     });
   }
 }
 
 async function handlePaymentCompleted(event) {
+  const email = event.email || `user-${event.userId}@example.com`;
+  const tpl = paymentReceiptEmail({
+    orderId: event.orderId,
+    amount: event.amount,
+    provider: event.provider || 'stripe',
+    transactionId: event.transactionId,
+  });
+
   await sendEmail({
-    to: event.email || `user-${event.userId}@example.com`,
-    subject: 'Payment Received',
-    body: `Payment of $${event.amount} for order #${event.orderId} was successful.`,
+    to: email,
+    subject: tpl.subject,
+    body: tpl.body,
+    html: tpl.html,
+    userId: event.userId,
+    eventType: 'payment.completed',
+    orderId: event.orderId,
   });
 }
 
 async function handleOrderStatusUpdated(event) {
+  const email = event.email || `user-${event.userId}@example.com`;
+  const tpl = shippingUpdateEmail({
+    orderId: event.orderId,
+    status: event.status,
+  });
+
   await sendEmail({
-    to: event.email || `user-${event.userId}@example.com`,
-    subject: `Order Update: ${event.status}`,
-    body: `Your order #${event.orderId} status is now: ${event.status}`,
+    to: email,
+    subject: tpl.subject,
+    body: tpl.body,
+    html: tpl.html,
+    userId: event.userId,
+    eventType: 'order.status.updated',
+    orderId: event.orderId,
   });
 
   if (event.status === 'shipped' && event.phone) {
     await sendSms({
       to: event.phone,
-      message: `Your order #${event.orderId.slice(0, 8)} has shipped!`,
+      message: `ShopFlow: Order #${event.orderId.slice(0, 8)} has shipped! Track it in your account.`,
+      userId: event.userId,
+      eventType: 'order.shipped',
+      orderId: event.orderId,
     });
   }
 }

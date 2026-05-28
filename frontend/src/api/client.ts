@@ -125,15 +125,51 @@ export const api = {
   getOrder: (orderId: string) =>
     request<{ order: import('../types').Order }>(`/api/orders/${orderId}`),
 
-  // Payment (checkout)
+  // Payment Service
+  getPaymentProviders: () =>
+    request<{ providers: import('../types').PaymentProvider[] }>('/api/payments/providers', {
+      auth: false,
+    }),
+
   processPayment: (data: {
     orderId: string;
     userId: string;
     amount: number;
     provider?: string;
+    currency?: string;
+    email?: string;
+    phone?: string;
+    card?: { number: string; exp: string; cvc: string; brand?: string; last4?: string };
+    paypalEmail?: string;
   }) =>
-    request<{ payment: { id: string; status: string; transactionId?: string } }>(
-      '/api/payments/process',
-      { method: 'POST', body: JSON.stringify({ ...data, provider: data.provider || 'stripe' }) }
+    request<{ payment: import('../types').Payment }>('/api/payments/process', {
+      method: 'POST',
+      body: JSON.stringify({ ...data, provider: data.provider || 'stripe' }),
+    }),
+
+  getPaymentsForOrder: (orderId: string) =>
+    request<{ payments: import('../types').Payment[] }>(`/api/payments/order/${orderId}`),
+
+  // Notification Service
+  getNotificationProviders: () =>
+    request<{ providers: { id: string; name: string; type: string; mode: string }[] }>(
+      '/api/notifications/providers',
+      { auth: false }
     ),
+
+  getNotifications: (params?: { userId?: string; email?: string }) => {
+    const q = new URLSearchParams();
+    if (params?.userId) q.set('userId', params.userId);
+    if (params?.email) q.set('email', params.email);
+    const query = q.toString();
+    return request<{ notifications: import('../types').Notification[] }>(
+      `/api/notifications${query ? `?${query}` : ''}`
+    );
+  },
+
+  updateOrderStatus: (orderId: string, status: string, email?: string, phone?: string) =>
+    request<{ order: import('../types').Order }>(`/api/orders/${orderId}/status`, {
+      method: 'PATCH',
+      body: JSON.stringify({ status, email, phone }),
+    }),
 };
