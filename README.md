@@ -1,280 +1,176 @@
 # Scalable E-Commerce Platform
 
-A production-style **microservices e-commerce platform** built with **Node.js**, **Docker**, and **Docker Compose**. Each domain (users, catalog, cart, orders, payments, notifications) runs as an independent service that can be developed, deployed, and scaled on its own.
+A microservices demo store: several small **Node.js** services behind an **API Gateway**, with a **React (Vite)** storefront. Users browse a product catalog, manage a cart, place orders, pay (mock Stripe/PayPal), and receive notifications. Services talk over REST and async **RabbitMQ** events, register themselves in **Consul**, and store data in **PostgreSQL** and **Redis**.
 
-## Architecture
+---
 
-```mermaid
-flowchart TB
-    Client[Client / Frontend] --> GW[API Gateway :8080]
-    GW --> Consul[Consul Service Discovery]
-    GW --> US[User Service]
-    GW --> PS[Product Service]
-    GW --> CS[Cart Service]
-    GW --> OS[Order Service]
-    GW --> PayS[Payment Service]
-    GW --> NS[Notification Service]
+## What you can do
 
-    US --> PG[(PostgreSQL)]
-    PS --> PG
-    OS --> PG
-    PayS --> PG
-    CS --> Redis[(Redis)]
+| Role | Capabilities |
+|------|----------------|
+| **Guest** | Browse the product catalog and product details, sign up, log in |
+| **User** | Everything a guest can do, plus manage a cart, check out (Stripe card or PayPal — mocked), view order history and order details, and read the notifications inbox |
+| **System** | Sends automatic email/SMS (mocked) on order placed, payment completed, and shipping updates via RabbitMQ events |
 
-    OS --> RMQ[RabbitMQ]
-    PayS --> RMQ
-    NS --> RMQ
+---
 
-    Prometheus --> GW
-    Prometheus --> US & PS & CS & OS & PayS & NS
-    Grafana --> Prometheus
-```
-
-### Core microservices
+## Services at a glance
 
 | Service | Port | Responsibility |
 |---------|------|----------------|
-| **User Service** | 3001 | Registration, JWT auth, profiles |
-| **Product Catalog** | 3002 | Products, categories, inventory |
-| **Cart Service** | 3003 | Redis-backed shopping carts |
-| **Order Service** | 3004 | Order placement, status, history |
-| **Payment Service** | 3005 | Stripe/PayPal (mock) processing |
-| **Notification Service** | 3006 | Email (SendGrid) & SMS (Twilio) mocks |
-| **API Gateway** | 8080 | Routing, JWT validation, Consul discovery |
+| API Gateway | 8080 | Single entry point, JWT checks, routing, Consul discovery |
+| User Service | 3001 | Registration, login (JWT), profiles |
+| Product Service | 3002 | Products, categories, inventory |
+| Cart Service | 3003 | Redis-backed shopping carts |
+| Order Service | 3004 | Order placement, status, history |
+| Payment Service | 3005 | Stripe / PayPal payments (mock by default) |
+| Notification Service | 3006 | Email (SendGrid) & SMS (Twilio) — mock by default |
 
-### Platform components
+Supporting infrastructure: **PostgreSQL** (per-service databases), **Redis** (cart), **RabbitMQ** (events), **Consul** (service discovery), and optional **Prometheus/Grafana** and **ELK** for monitoring and logs.
 
-| Component | Technology | Purpose |
-|-----------|------------|---------|
-| API Gateway | Express + Consul | Single entry point, auth, routing |
-| Service discovery | HashiCorp Consul | Dynamic service registration |
-| Message bus | RabbitMQ | Async events (`order.created`, `payment.completed`, …) |
-| Databases | PostgreSQL (per-service DB) | Persistent storage |
-| Cache | Redis | Cart sessions |
-| Monitoring | Prometheus + Grafana | Metrics & dashboards |
-| Logging | ELK (optional profile) | Centralized log aggregation |
-| CI/CD | GitHub Actions | Lint, build, integration smoke tests |
+---
 
-## Quick start
+## Prerequisites
 
-### Prerequisites
+- **Docker** and Docker Compose v2 (runs the whole backend and infrastructure)
+- **Node.js 20+** and npm (only needed for local frontend development)
 
-- [Docker](https://docs.docker.com/get-docker/) & Docker Compose v2
-- (Optional) Node.js 20+ for local frontend development
+---
 
-### Run the platform
+## 1. Configure environment
+
+From the repository root:
 
 ```bash
-# Clone and start all services (including web UI)
 cp .env.example .env
+```
+
+The defaults work out of the box. Payments and notifications run in **mock mode** unless you add real API keys. Adjust secrets (`JWT_SECRET`, `POSTGRES_PASSWORD`, `RABBITMQ_PASSWORD`) before any real deployment.
+
+---
+
+## 2. Run it
+
+There are two ways to run the project. Pick one.
+
+### Option A — Two terminals (recommended for development)
+
+Backend in Docker, frontend with Vite hot reload — same workflow as the movie reservation project.
+
+**Terminal 1 — backend** (gateway + services + infrastructure; logs stream here):
+
+```bash
+make dev-backend
+```
+
+Wait until the services report healthy. The API is at [http://localhost:8080](http://localhost:8080).
+
+**Terminal 2 — frontend** (Vite dev server):
+
+```bash
+make dev-frontend
+```
+
+Open [http://localhost:5173](http://localhost:5173). Vite proxies `/api` to `http://localhost:8080`.
+
+Stop the backend with `Ctrl+C` in Terminal 1, then `make down` to remove the containers.
+
+### Option B — All in Docker
+
+Runs everything, including the storefront, in one command:
+
+```bash
 make up
 # or: docker compose up -d --build
 ```
 
-Wait ~60 seconds for services to become healthy, then open:
+Give it ~60 seconds to become healthy, then open:
 
-- **Web storefront:** [http://localhost:5173](http://localhost:5173)
-- **API Gateway:** [http://localhost:8080](http://localhost:8080)
+- Storefront: [http://localhost:5173](http://localhost:5173)
+- API Gateway: [http://localhost:8080](http://localhost:8080)
+
+Quick check:
 
 ```bash
 curl http://localhost:8080/health
 curl http://localhost:8080/api/products
 ```
 
-### Two-terminal dev (recommended — same as movie reservation project)
+---
 
-Use **two terminal tabs/windows** from the project root:
+## 3. Smoke test (optional)
 
-**Terminal 1 — Backend** (microservices + API gateway; logs stream here):
-
-```bash
-cd /path/to/Scalable-E-Commerce-Platform
-cp .env.example .env          # first time only
-make dev-backend
-```
-
-Wait until you see services listening. API: http://localhost:8080
-
-**Terminal 2 — Frontend** (Vite hot reload):
+Registers a user, adds a product to the cart, places an order, pays, and checks notifications end to end:
 
 ```bash
-cd /path/to/Scalable-E-Commerce-Platform
-make dev-frontend
-```
-
-Open http://localhost:5173 — Vite proxies `/api` → `http://localhost:8080`
-
-Stop backend: `Ctrl+C` in terminal 1, then `make down` to remove containers.
-
-### All-in-one (Docker only, no separate frontend terminal)
-
-```bash
-make up
-# UI: http://localhost:5173   API: http://localhost:8080
-```
-
-### End-to-end smoke test
-
-```bash
-chmod +x scripts/smoke-test.sh
 make smoke
 ```
 
-This script registers a user, adds a product to the cart, places an order, processes payment, and checks notifications.
+---
 
-## API usage (via gateway)
-
-Base URL: `http://localhost:8080`
-
-### Register & login (public)
-
-```bash
-curl -X POST http://localhost:8080/api/users/register \
-  -H "Content-Type: application/json" \
-  -d '{"email":"user@example.com","password":"secret123","firstName":"Jane"}'
-
-curl -X POST http://localhost:8080/api/users/login \
-  -H "Content-Type: application/json" \
-  -d '{"email":"user@example.com","password":"secret123"}'
-```
-
-Use the returned `token` as `Authorization: Bearer <token>` for protected routes.
-
-### Browse products (public)
-
-```bash
-curl http://localhost:8080/api/products
-curl http://localhost:8080/api/products/categories/list
-```
-
-### Cart, orders, payments (authenticated)
-
-```bash
-TOKEN="<your-jwt>"
-USER_ID="<your-user-id>"
-PRODUCT_ID="<product-uuid>"
-
-# Add to cart
-curl -X POST "http://localhost:8080/api/cart/$USER_ID/items" \
-  -H "Authorization: Bearer $TOKEN" \
-  -H "Content-Type: application/json" \
-  -d "{\"productId\":\"$PRODUCT_ID\",\"name\":\"Headphones\",\"price\":149.99,\"quantity\":1}"
-
-# Place order
-curl -X POST http://localhost:8080/api/orders \
-  -H "Authorization: Bearer $TOKEN" \
-  -H "Content-Type: application/json" \
-  -d "{\"userId\":\"$USER_ID\",\"email\":\"user@example.com\",\"shippingAddress\":{\"street\":\"1 Main St\"}}"
-
-# Pay for order
-curl -X POST http://localhost:8080/api/payments/process \
-  -H "Authorization: Bearer $TOKEN" \
-  -H "Content-Type: application/json" \
-  -d "{\"orderId\":\"<order-id>\",\"userId\":\"$USER_ID\",\"amount\":149.99,\"provider\":\"stripe\"}"
-```
-
-## Observability
-
-| PostgreSQL (host) | `localhost:5433` | `ecommerce` / `ecommerce_secret` |
-
-> Host port `5433` avoids conflicts if you already run Postgres on `5432`.
+## Handy URLs
 
 | Tool | URL | Credentials |
 |------|-----|-------------|
-| **Web UI** | http://localhost:5173 | — |
+| Storefront | http://localhost:5173 | — |
 | API Gateway | http://localhost:8080 | — |
 | Consul UI | http://localhost:8500 | — |
-| RabbitMQ Management | http://localhost:15672 | `ecommerce` / `ecommerce_secret` |
+| RabbitMQ | http://localhost:15672 | `ecommerce` / `ecommerce_secret` |
 | Prometheus | http://localhost:9090 | — |
 | Grafana | http://localhost:3000 | `admin` / `admin` |
+| PostgreSQL (host) | localhost:**5433** | `ecommerce` / `ecommerce_secret` |
 
-### Enable ELK logging
+> Postgres uses host port **5433** to avoid clashing with a local Postgres on 5432.
+
+Enable centralized logging (ELK) if you want it:
 
 ```bash
-make logging
-# Kibana: http://localhost:5601
+make logging   # Kibana: http://localhost:5601
 ```
 
-## Web frontend
+---
 
-React + TypeScript storefront in `frontend/` integrated with all microservices:
+## Typical usage flow
 
-| Page | Microservice |
-|------|----------------|
-| Register / Login / Profile | User Service |
-| Product catalog & detail | Product Catalog Service |
-| Shopping cart | Cart Service |
-| Checkout (2-step) & order history | Order + **Payment** Services |
-| **Notifications** inbox | **Notification** Service |
-| Order detail — payment info, mark shipped | Payment + Notification Services |
+1. **Start** the backend and frontend (Option A or B above).
+2. **Sign up** or log in from the storefront.
+3. **Browse** the catalog, open a product, and **add it to your cart**.
+4. **Check out** — enter shipping details, then pick Stripe (card) or PayPal (email). Payments are mocked by default.
+5. **Order history / detail** — track status, view payment info, and (demo) mark a paid order as shipped to trigger shipping notifications.
+6. **Notifications** — open the inbox in the nav to see the email/SMS the system generated.
 
-### Payment Service (Stripe & PayPal)
+---
 
-- Checkout step 2: choose **Stripe** (card) or **PayPal** (email)
-- Mock mode by default (`STRIPE_MOCK=true`, `PAYPAL_MOCK=true`)
-- Live mode: set mocks to `false` and add API keys in `.env` (see `.env.example`)
-- Order detail shows transaction ID, card last4, or PayPal email
+## Project layout (high level)
 
-### Notification Service (SendGrid & Twilio)
+| Path | Role |
+|------|------|
+| `docker-compose.yml` | Orchestrates all services and infrastructure |
+| `Makefile` | `up`, `down`, `dev-backend`, `dev-frontend`, `smoke`, `logging` |
+| `gateway/api-gateway/` | API Gateway (routing, auth, discovery) |
+| `services/` | The six microservices (user, product, cart, order, payment, notification) |
+| `shared/` | Shared logging, Consul, metrics, and messaging helpers |
+| `frontend/` | React + TypeScript storefront (Vite) |
+| `infrastructure/` | Postgres init, Prometheus, Grafana, ELK config |
+| `scripts/smoke-test.sh` | End-to-end smoke test |
+| `.github/workflows/ci.yml` | CI: lint, build images, run smoke tests |
 
-Automatic messages via RabbitMQ events:
+---
 
-| Event | Email (SendGrid) | SMS (Twilio) |
-|-------|------------------|--------------|
-| `order.created` | Order confirmation | If phone on profile |
-| `payment.completed` | Payment receipt | — |
-| `order.status.updated` | Status update | When status = `shipped` |
+## Troubleshooting
 
-View history at **Notifications** in the nav. Demo: open a paid order → **Mark as shipped** to trigger shipping notifications.
+- **`Request failed (500)` in the storefront** — the frontend is up but the backend isn't. Make sure `make dev-backend` (or `make up`) is running and the gateway responds at [http://localhost:8080/health](http://localhost:8080/health). The Vite proxy returns 500 when it can't reach the gateway.
+- **A service won't start / Consul unhealthy** — the registry is ephemeral by design, so `make down` then start again for a clean boot.
+- **Port already in use** — check nothing else is on `8080`, `5173`, `5433`, `8500`, `15672`, `9090`, or `3000`.
+- **Catalog looks empty or stale** — the product database seeds only when its table is empty. To reload seed data, reset the Postgres volume (this wipes all service data): `docker compose down -v` then start again.
 
-## Project structure
+---
 
-```
-├── docker-compose.yml          # Full stack orchestration
-├── frontend/                   # React storefront (Vite + TypeScript)
-├── shared/                     # Common logging, Consul, metrics, messaging
-├── gateway/api-gateway/        # API Gateway
-├── services/
-│   ├── user-service/
-│   ├── product-service/
-│   ├── cart-service/
-│   ├── order-service/
-│   ├── payment-service/
-│   └── notification-service/
-├── infrastructure/             # Postgres init, Prometheus, Grafana, ELK
-├── scripts/smoke-test.sh
-├── .github/workflows/ci.yml
-└── Makefile
-```
+## Going live (notes)
 
-## Event-driven flows
+Payments and notifications ship in mock mode. To use real providers, set the matching `*_MOCK=false` flags and add credentials in `.env` (see `.env.example`): Stripe, PayPal, SendGrid, and Twilio. Never commit `.env`.
 
-1. **Order placed** → `order.created` → Notification service sends confirmation email/SMS  
-2. **Payment completed** → `payment.completed` → Order service marks order paid; notification sent  
-3. **Status update** → `order.status.updated` → Shipping notification  
-
-## Configuration
-
-Copy `.env.example` to `.env` and adjust secrets for production:
-
-- `JWT_SECRET` — signing key for auth tokens  
-- `POSTGRES_PASSWORD`, `RABBITMQ_PASSWORD`  
-- Set `STRIPE_MOCK=false`, `SENDGRID_MOCK=false`, `TWILIO_MOCK=false` and wire real SDK credentials when going live  
-
-## CI/CD
-
-GitHub Actions (`.github/workflows/ci.yml`) runs on every push/PR:
-
-1. Syntax-check each microservice  
-2. Build all Docker images  
-3. Spin up the stack and run integration smoke tests  
-
-## Scaling & production notes
-
-- **Horizontal scaling**: `docker compose up -d --scale product-service=3` (register each instance with Consul)  
-- **Kubernetes**: Replace Compose with Helm charts; use Ingress instead of the gateway container  
-- **Secrets**: Use Docker secrets or a vault; never commit `.env`  
-- **Real gateways**: Kong, Traefik, or NGINX can replace the Node gateway for advanced rate limiting and TLS termination  
+---
 
 ## License
 
